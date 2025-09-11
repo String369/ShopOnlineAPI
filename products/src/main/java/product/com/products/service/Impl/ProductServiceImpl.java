@@ -17,13 +17,11 @@ public class ProductServiceImpl implements ProductService {
 
     private final ProductRepository productRepository;
     private final ProductMapper productMapper;
-    private final MongoTemplate mongoTemplate;
 
     @Autowired
     public ProductServiceImpl(ProductRepository productRepository, ProductMapper productMapper, MongoTemplate mongoTemplate) {
         this.productRepository = productRepository;
         this.productMapper = productMapper;
-        this.mongoTemplate = mongoTemplate;
     }
 
     @Override
