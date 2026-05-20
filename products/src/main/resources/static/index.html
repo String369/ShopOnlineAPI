@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ShopOnline Products UI</title>
+  <style>
+    body { margin: 0; font-family: Arial, sans-serif; background: #f4f6f8; color: #1f2937; }
+    .container { max-width: 1100px; margin: 2rem auto; padding: 1rem; }
+    .grid { display: grid; grid-template-columns: 360px 1fr; gap: 1rem; align-items: start; }
+    .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 1rem; }
+    label { display: block; font-weight: 700; margin: .75rem 0 .25rem; font-size: .9rem; }
+    input, textarea { width: 100%; box-sizing: border-box; padding: .6rem .7rem; border-radius: 8px; border: 1px solid #d1d5db; }
+    textarea { min-height: 80px; resize: vertical; }
+    .row { display: flex; gap: .5rem; }
+    button { border: none; border-radius: 8px; padding: .65rem .9rem; cursor: pointer; font-weight: 700; }
+    .btn-primary { background: #2563eb; color: white; } .btn-muted { background: #e5e7eb; } .btn-danger { background: #dc2626; color: #fff; }
+    table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+    th, td { text-align: left; padding: .65rem; border-bottom: 1px solid #e5e7eb; }
+    th { background: #f9fafb; }
+    .actions { display: flex; gap: .35rem; }
+    .toolbar { display: flex; justify-content: space-between; gap: .6rem; margin-bottom: .6rem; flex-wrap: wrap; }
+    .status { margin-top: .75rem; font-size: .9rem; }
+    .ok { color: #15803d; } .err { color: #b91c1c; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>ShopOnline Product Manager</h1>
+  <p>Simple UI for your Spring Boot product API.</p>
+  <div class="grid">
+    <section class="card">
+      <h2 id="formTitle">Add Product</h2>
+      <input type="hidden" id="productId" />
+      <label>Title</label><input id="title" required />
+      <label>Price</label><input id="price" type="number" step="0.01" min="0" required />
+      <label>Description</label><textarea id="description" required></textarea>
+      <label>Category</label><input id="category" required />
+      <label>Image URL</label><input id="image" />
+      <label>Rating (0-5)</label><input id="rate" type="number" step="0.1" min="0" max="5" />
+      <label>Rating Count</label><input id="count" type="number" step="1" min="0" />
+      <div class="row" style="margin-top: 1rem;">
+        <button class="btn-primary" id="saveBtn">Save</button>
+        <button class="btn-muted" id="resetBtn" type="button">Clear</button>
+      </div>
+      <p id="status" class="status"></p>
+    </section>
+
+    <section class="card">
+      <div class="toolbar">
+        <input id="categoryFilter" placeholder="Filter by category..." />
+        <div class="row">
+          <button class="btn-muted" id="filterBtn">Filter</button>
+          <button class="btn-primary" id="refreshBtn">Refresh</button>
+        </div>
+      </div>
+      <table>
+        <thead><tr><th>ID</th><th>Title</th><th>Category</th><th>Price</th><th>Rating</th><th>Actions</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </section>
+  </div>
+</div>
+<script>
+  const apiBase = '/api/products';
+  const rowsEl = document.getElementById('rows');
+  const statusEl = document.getElementById('status');
+  const formTitle = document.getElementById('formTitle');
+  const fields = {
+    id: document.getElementById('productId'), title: document.getElementById('title'), price: document.getElementById('price'),
+    description: document.getElementById('description'), category: document.getElementById('category'), image: document.getElementById('image'),
+    rate: document.getElementById('rate'), count: document.getElementById('count')
+  };
+  let products = [];
+
+  const setStatus = (msg, err = false) => { statusEl.textContent = msg; statusEl.className = `status ${err ? 'err' : 'ok'}`; };
+  const resetForm = () => { Object.values(fields).forEach(el => el.value = ''); formTitle.textContent = 'Add Product'; };
+
+  function getPayload() {
+    return {
+      title: fields.title.value.trim(),
+      price: Number(fields.price.value),
+      description: fields.description.value.trim(),
+      category: fields.category.value.trim(),
+      image: fields.image.value.trim(),
+      rating: { rate: Number(fields.rate.value || 0), count: Number(fields.count.value || 0) }
+    };
+  }
+
+  function editProduct(index) {
+    const p = products[index];
+    fields.id.value = p.id ?? '';
+    fields.title.value = p.title ?? '';
+    fields.price.value = p.price ?? '';
+    fields.description.value = p.description ?? '';
+    fields.category.value = p.category ?? '';
+    fields.image.value = p.image ?? '';
+    fields.rate.value = p.rating?.rate ?? '';
+    fields.count.value = p.rating?.count ?? '';
+    formTitle.textContent = `Edit Product #${p.id}`;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function renderRows() {
+    rowsEl.innerHTML = products.map((p, i) => `
+      <tr>
+        <td>${p.id ?? '-'}</td><td>${p.title ?? ''}</td><td>${p.category ?? ''}</td>
+        <td>$${Number(p.price ?? 0).toFixed(2)}</td><td>${p.rating?.rate ?? 0} (${p.rating?.count ?? 0})</td>
+        <td class="actions">
+          <button class="btn-muted" data-edit="${i}">Edit</button>
+          <button class="btn-danger" data-del="${p.id}">Delete</button>
+        </td>
+      </tr>`).join('');
+
+    rowsEl.querySelectorAll('[data-edit]').forEach(btn => btn.addEventListener('click', () => editProduct(Number(btn.dataset.edit))));
+    rowsEl.querySelectorAll('[data-del]').forEach(btn => btn.addEventListener('click', () => deleteProduct(btn.dataset.del)));
+  }
+
+  async function loadProducts(category = '') {
+    const endpoint = category ? `${apiBase}/category/${encodeURIComponent(category)}` : apiBase;
+    const res = await fetch(endpoint);
+    if (!res.ok) throw new Error('Could not load products');
+    products = await res.json();
+    renderRows();
+  }
+
+  async function saveProduct() {
+    try {
+      const id = fields.id.value;
+      const res = await fetch(id ? `${apiBase}/${id}` : apiBase, {
+        method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(getPayload())
+      });
+      if (!res.ok) throw new Error('Save failed');
+      setStatus(`Product ${id ? 'updated' : 'created'} successfully.`);
+      resetForm();
+      await loadProducts(document.getElementById('categoryFilter').value.trim());
+    } catch (e) { setStatus(e.message, true); }
+  }
+
+  async function deleteProduct(id) {
+    if (!confirm(`Delete product #${id}?`)) return;
+    try {
+      const res = await fetch(`${apiBase}/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Delete failed');
+      setStatus('Product deleted.');
+      await loadProducts(document.getElementById('categoryFilter').value.trim());
+    } catch (e) { setStatus(e.message, true); }
+  }
+
+  document.getElementById('saveBtn').addEventListener('click', saveProduct);
+  document.getElementById('resetBtn').addEventListener('click', resetForm);
+  document.getElementById('refreshBtn').addEventListener('click', () => loadProducts().catch(e => setStatus(e.message, true)));
+  document.getElementById('filterBtn').addEventListener('click', () => loadProducts(document.getElementById('categoryFilter').value.trim()).catch(e => setStatus(e.message, true)));
+  loadProducts().catch(e => setStatus(e.message, true));
+</script>
+</body>
+</html>
